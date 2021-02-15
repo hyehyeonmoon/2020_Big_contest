@@ -1,0 +1,751 @@
+---
+title: "전처리 코드"
+author: "시대의 분석가(문혜현, 정세린, 부대권)"
+date: "`r format(Sys.Date())`"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 7
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_section: true
+editor_options: 
+  chunk_output_type: console
+  keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=F,fig.align = "center", message=F, warning=F, fig.height = 6)
+```
+
+# 사전준비
+
+## Package 불러오기
+
+```{r}
+library(yaml); library(knitr)
+if(!require(readxl)){install.packages("readxl"); library(readxl)}
+if(!require(sf)){install.packages("sf"); library(sf)}
+if(!require(rgdal)){install.packages("rgdal")}
+if(!require(maptools)){install.packages("maptools"); library(maptools)}
+if(!require(dplyr)){install.packages("dplyr"); library(dplyr)}
+if(!require(reshape2)){install.packages("reshape2"); library(reshape2)}
+if(!require(ggplot2)){install.packages("ggplot2"); library(ggplot2)}
+if(!require(plotly)){install.packages("plotly"); library(plotly)}
+if(!require(scales)){install.packages("scales"); library(scales)}
+if(!require(patchwork)){
+  if(!require(devtools)){install.packages("devtools")}
+  devtools::install_github("thomasp85/patchwork"); library(plotly)
+}
+if(!require(stringr)){install.packages("stringr"); library(stringr)}
+if(!require(lubridate)){install.packages("lubridate"); library(lubridate)}
+if(!require(gridExtra)){install.packages("gridExtra"); library(gridExtra)}
+library(tibble)
+```
+
+## 데이터 불러오기
+
+```{r}
+setwd("C:\\Users\\moonf\\Desktop\\결과물")# 경로를 설정해 줍니다.
+path<-"C:\\Users\\moonf\\Desktop\\결과물"
+
+load("./코드/유동인구.rdata")
+```
+
+# 유동인구데이터(SK텔레콤)
+
+## 지도데이터
+
+```{r}
+# knit 로 실행하기보다 R 또는 Rstudio에서 직접 실행해 주세요.
+# setwd(path)
+# {
+#   map = st_read("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/01_유동인구데이터(SK텔레콤)/4개지역_행정동.shp",
+#                 stringsAsFactors = F)
+#   map_sp = as_Spatial(map)
+#   map_sp = spTransform(map_sp,
+#                        CRS("+proj=longlat"))
+#   map_df = fortify(map_sp)
+#   map_meta = cbind(data.frame(map)[as.numeric(map_df$id),1:11], map_df)
+# 
+#   map_meta[,10:11] = sapply(map_meta[,10:11], as.numeric)
+#   map_meta[map_meta$HDONG_NM == "수성1가동", 11] = 35.856
+#   map_meta[map_meta$HDONG_NM == "수성2.3가동", 11] = 35.854
+# 
+#   map_meta = map_meta[, c(5, 7, 3, 2, 8, 9, 10:13)]
+# 
+#   gg_map_seoul = map_meta %>% filter(SIDO_NM == "서울특별시") %>%
+#     select(long, lat, HDONG_CD)
+#   colnames(gg_map_seoul)[3] = "id"
+#   gg_map_daegu = map_meta %>% filter(SIDO_NM == "대구광역시") %>%
+#     select(long, lat, HDONG_CD)
+#   colnames(gg_map_daegu)[3] = "id"
+# }
+# 
+# ```
+# 
+#
+```
+
+## 나이, 성별 유동인구
+```{r}
+# 
+#
+# 
+# ```{r}
+# setwd(path)
+# {
+#   year = c("2019", "2020")
+#   month = paste0("0", 2:5)
+#   age_flow = NULL
+#   for(i in 1:2){
+#     for(j in 1:4){
+#       name = paste0("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/01_유동인구데이터(SK텔레콤)/4개지역_FLOW_AGE_",
+#                     year[i], month[j], ".csv")
+#       # 오류를 없애기 위해 넣은 코드(encoding 문제 예상)
+#       b = read.table(name, stringsAsFactors = F)
+#       Encoding(b$V1) = "UTF-8"
+#       b_mid = matrix(unlist(strsplit(b$V1, "\\|")), ncol = 34, byrow = T)
+#       colnames(b_mid) = b_mid[1,]
+#       b_mid = data.frame(b_mid[-1,])
+#       
+#       b_mid[,-4] = sapply(b_mid[,-4], function(x) as.numeric(as.vector(x)))
+#       b_mid[,1:4] = sapply(b_mid[,1:4], as.character)
+#       
+#       
+#       colnames(b_mid)[-(1:4)] = unlist(lapply(strsplit(colnames(b_mid)[-(1:4)], "_FLOW_POP_CNT_"), function(x) paste0(x, collapse = "")))
+#       colnames(b_mid)[1] = "STD_YM"
+#       
+#       # long type으로 바꿈
+#       b_midmid = melt(b_mid, id.vars = colnames(b_mid)[1:4], variable.name = "genderage", value.name = "flow_pop")
+#       
+#       # 성별, 나이 분리
+#       d = unlist(str_split(b_midmid$genderage, "MAN"))
+#       d[d==""] = "M"
+#       d_mid = sapply(data.frame(matrix(d, ncol = 2, byrow = T)), as.character)
+#       colnames(d_mid) = c("gender", "age")
+#       
+#       # 합침
+#       a = cbind(STD_Y = year[i], b_midmid[,1:4], d_mid, flow_pop = b_midmid[,6])
+#       age_flow = rbind(age_flow, a)
+#     }
+#   }
+#   age_flow$STD_Y = as.character(age_flow$STD_Y)
+#   age_flow$STD_YMD = as.Date(age_flow$STD_YMD, format = "%Y%m%d")
+#   
+#   age_flow$weekday = weekdays(age_flow$STD_YMD)
+#   age_flow$weekend = rep("평일", nrow(age_flow))
+#   age_flow$weekend[age_flow$weekday %in% c("토요일", "일요일")] = "주말"
+#   
+#   age_flow$SIDO_NM = NA
+#   age_flow$SGNG_NM = NA
+#   age_flow[str_detect(age_flow$HDONG_CD, "^27260"), 12] = "수성구"
+#   age_flow[str_detect(age_flow$HDONG_CD, "^27110"), 12] = "중구"
+#   age_flow[str_detect(age_flow$HDONG_CD, "^27"), 11] = "대구광역시"
+#   age_flow[str_detect(age_flow$HDONG_CD, "^11350"), 12] = "노원구"
+#   age_flow[str_detect(age_flow$HDONG_CD, "^11140"), 12] = "중구"
+#   age_flow[str_detect(age_flow$HDONG_CD, "^11"), 11] = "서울특별시"
+#   
+#   
+#   age_flow = age_flow[,c(1:3, 10, 9, 11, 12, 5, 4, 6, 7, 8)]
+# }
+# 
+# age_flow$age_n<-NA
+# age_flow$age_n[age_flow$age<10]="10세 미만"
+# age_flow$age_n[10 <= age_flow$age & age_flow$age<20]="10대"
+# age_flow$age_n[20 <= age_flow$age & age_flow$age<30]="20대"
+# age_flow$age_n[30 <= age_flow$age & age_flow$age<40]="30대"
+# age_flow$age_n[40 <= age_flow$age & age_flow$age<50]="40대"
+# age_flow$age_n[50 <= age_flow$age & age_flow$age<60]="50대"
+# age_flow$age_n[60 <= age_flow$age & age_flow$age<70]="60대"
+# age_flow$age_n[70 <= age_flow$age]="70세 이상"
+# 
+# ```
+# 
+# 
+```
+
+## 시간별 유동인구
+```{r}
+# 
+# ```{r}
+#setwd(path)
+# {
+#   year = c("2019", "2020")
+#   month = paste0("0", 2:5)
+#   time_flow = NULL
+#   for(i in 1:2){
+#     for(j in 1:4){
+#       name = paste0("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/01_유동인구데이터(SK텔레콤)/4개지역_FLOW_TIME_",
+#                     year[i], month[j], ".csv")
+#       # 인코딩 때문인지..이대로 해야 오류 없음
+#       b = read.table(name, stringsAsFactors = F)
+#       Encoding(b$V1) = "UTF-8"
+#       b_mid = matrix(unlist(strsplit(b$V1, "\\|")), ncol = 28, byrow = T)
+#       colnames(b_mid) = b_mid[1,]
+#       b_mid = data.frame(b_mid[-1,])
+#       
+#       b_mid[,-4] = sapply(b_mid[,-4], function(x) as.numeric(as.vector(x)))
+#       b_mid[,1:4] = sapply(b_mid[,1:4], as.character)
+#       
+#       colnames(b_mid)[1] = "STD_YM"
+#       
+#       # long type으로
+#       b_midmid = melt(b_mid, id.vars = colnames(b_mid)[1:4], variable.name = "hour", value.name = "flow_pop")
+#       
+#       b_midmid$hour = str_remove(b_midmid$hour, "TMST_")
+#       b_midmid$time = paste(b_midmid$STD_YMD, b_midmid$hour)
+#       
+#       b_midmid$STD_Y = year[i]
+#       time_flow = rbind(time_flow, b_midmid)
+#     }
+#   }
+#   time_flow$STD_YMD = as.Date(time_flow$STD_YMD, format = "%Y%m%d")
+#   time_flow$time = as.POSIXct(paste0(time_flow$time, "00"), format = "%Y%m%d %H%M")
+#   
+#   time_flow$weekday = weekdays(time_flow$STD_YMD)
+#   time_flow$weekend = rep("평일", nrow(time_flow))
+#   time_flow$weekend[time_flow$weekday %in% c("토요일", "일요일")] = "주말"
+#   
+#   time_flow$SIDO_NM = NA
+#   time_flow$SGNG_NM = NA
+#   time_flow[str_detect(time_flow$HDONG_CD, "^27260"), 12] = "수성구"
+#   time_flow[str_detect(time_flow$HDONG_CD, "^27110"), 12] = "중구"
+#   time_flow[str_detect(time_flow$HDONG_CD, "^27"), 11] = "대구광역시"
+#   time_flow[str_detect(time_flow$HDONG_CD, "^11350"), 12] = "노원구"
+#   time_flow[str_detect(time_flow$HDONG_CD, "^11140"), 12] = "중구"
+#   time_flow[str_detect(time_flow$HDONG_CD, "^11"), 11] = "서울특별시"
+#   
+#   time_flow = time_flow[, c(8, 1, 2, 10, 9, 5, 7, 11, 12, 4, 3, 6)]
+# }
+# 
+```
+
+
+# 카드매출데이터(신한카드)
+```{r}
+
+setwd(path)
+{
+  code = unique(map_meta[,1:4])
+  code$a = (as.numeric(code$HDONG_CD) %% 100000)/100
+
+
+  card = read.table("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/02_카드매출데이터(신한카드)/CARD_SPENDING_RESIDENT/CARD_SPENDING_RESIDENT.txt",
+                    header = T)
+  card_summary = read_xlsx("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/02_카드매출데이터(신한카드)/02_혁신아이디어분야_카드소비데이터(신한카드)_데이터정의서.xlsx",
+                           sheet = 3, skip = 1)
+  card_summary = c(na.omit(card_summary$`업종코드 (32개 분류)`))
+  card_summary = data.frame(matrix(unlist(strsplit(card_summary, "[()]")), byrow = T, ncol = 2))
+  colnames(card_summary) = c("gubun", "code")
+
+  card = merge(card, code, by.x = "DONG_CD", by.y = "a")
+
+  card = merge(card, card_summary, by.x = "MCT_CAT_CD", by.y = "code")
+
+  card$year = as.character(card$STD_DD %/% 10000)
+  card$month = as.character(card$STD_DD %/% 100)
+
+  card$STD_DD = as.Date(as.character(card$STD_DD), format = "%Y%m%d")
+  card$AGE_CD = as.character(card$AGE_CD)
+  card$MCT_CAT_CD = as.character(card$MCT_CAT_CD)
+
+  card$weekday = weekdays(card$STD_DD)
+  card$weekend = rep("평일", nrow(card))
+  card$weekend[card$weekday %in% c("토요일", "일요일")] = "주말"
+
+  card = card[,c(14, 15, 3, 17, 16, 9:12, 13, 1, 5:8)]
+
+}
+```
+
+# SNS데이터(와이즈넛)
+
+```{r}
+setwd(path)
+a = read.csv("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/03_SNS데이터(와이즈넛)/2020 bigcontest data_wisenut.csv",
+             fileEncoding = "UTF-8", skip = 1, header = F, sep = "\a")
+colnames(a) = read.csv("./데이터/2020빅콘테스트 문제데이터(혁신아이디어분야)/03_SNS데이터(와이즈넛)/2020 bigcontest data_wisenut.csv",
+                       fileEncoding = "UTF-8", nrow = 1, header = F,
+                       sep = "\a")
+
+a$SEQ = a$`GU_NM(삭제)` = a$`DONG_NM(삭제)` = NULL
+
+a = melt(a, id.vars = c("GU_CD", "DONG_CD"))
+a$STD_YM = unlist(lapply(strsplit(as.character(a$variable), "_"), tail, 1))
+a$variable = unlist(lapply(strsplit(as.character(a$variable), "_"), function(x) paste(head(x, 2), collapse = "_")))
+a = dcast(a, GU_CD + DONG_CD + STD_YM ~ variable )
+
+splited = strsplit(a$UP_TOPIC, ",")
+for(i in 1:length(splited)){
+  length(splited[[i]]) = 5
+}
+
+b =  data.frame(a[,1:3], matrix(unlist(splited), byrow = T, ncol = 5))
+colnames(b)[4:8] = paste0("topic", 1:5)
+
+a$UP_TOPIC = NULL
+
+topic = b
+count = a[, 1:6]
+
+p_n = a[,c(1:3, 7:18)]
+p_n = melt(p_n, id.vars = colnames(a)[1:3])
+p_n$gubun = as.factor(unlist(lapply(strsplit(as.character(p_n$variable), "_"), head, 1)))
+p_n$pn = unlist(lapply(strsplit(as.character(p_n$variable), "_"), tail, 1))
+p_n$variable = NULL
+
+
+levels(p_n$gubun) = c("숙박", "레저업소", "문화취미",
+                      "의료기관", "보건위생", "요식업소")
+
+formerge = map_meta %>% select(SIDO_NM, SGNG_NM, HDONG_NM, HDONG_CD) %>%
+  unique()
+formerge$a = (as.numeric(formerge$HDONG_CD) %% 100000)/100
+
+p_n = left_join(p_n, formerge, by = c("DONG_CD" = "a"))
+p_n$STD_Y = as.character(as.numeric(p_n$STD_YM) %/% 100)
+p_n$value = as.numeric(p_n$value)
+p_n = p_n[,c(11, 3, 7:10, 5, 6, 4)]
+
+
+topic = melt(topic, id.vars = c("GU_CD", "DONG_CD", "STD_YM"), variable.name = "topic",
+             value.name = "keyword")
+
+
+
+
+formerge = map_meta[,1:4] %>% unique()
+formerge$GU_DONG = as.numeric(formerge$HDONG_CD) %% 10^8
+topic$GU_DONG = (topic$GU_CD * 1000 + topic$DONG_CD) * 100
+
+topic = left_join(topic, formerge, by = c("GU_DONG" = "GU_DONG"))
+
+topic$STD_Y = as.character(as.numeric(topic$STD_YM) %/% 100)
+topic = topic[,c("STD_Y", "STD_YM", "SIDO_NM", "SGNG_NM", "HDONG_NM", "HDONG_CD", "topic", "keyword")]
+unique_keyword = 
+  topic %>% 
+  filter(STD_Y == "2019") %>% 
+  select(HDONG_NM, keyword) %>% 
+  unique() %>%
+  filter(!duplicated(keyword))
+
+
+```
+
+
+
+
+# 코로나 데이터
+
+## Open Api에서 데이터 가져오기
+
+```{r}
+{
+  corona_api = function(survice_key, survice, page = 1, max_num = 100000){
+    if(!require(XML)){install.packages("XML"); library(XML)}
+    url = paste0('http://openapi.data.go.kr/openapi/service/rest/Covid19/', 
+                 survice,
+                 '?ServiceKey=', survice_key, 
+                 "&pageNo=", page, 
+                 "&numOfRows=1000", max_num,
+                 "&startCreateDt=&endCreateDt=&")
+    
+    mugi = xmlTreeParse(url, useInternalNodes = T, encoding = "UTF-8")
+    items = xmlRoot(mugi)[[2]][["items"]]
+    
+    corona_temp = list()
+    
+    for(i in 1:xmlSize(items)){
+      temp = xmlSApply(items[[i]], xmlValue)
+      corona_temp[[i]] = data.frame(matrix(temp, nrow = 1))
+      colnames(corona_temp[[i]]) = names(temp)
+    }
+    
+    col_leng = unlist(lapply(corona_temp, ncol))
+    corona_tot = data.frame(matrix(NA, nrow = length(corona_temp), 
+                                   ncol = max(col_leng)))
+    colnames(corona_tot) = colnames(corona_temp[[which.max(col_leng)]])
+    
+    for(i in 1:length(corona_temp)){
+      corona_tot[i, colnames(corona_temp[[i]])] = unlist(corona_temp[[i]])
+    }
+    
+    return(corona_tot)
+  }
+  
+  survice_key = "2C43OUIGBDX0yB6la9ytSzNlqGEFV5AqM5TB3hi9pDIeCampo9IL7ur8KJjKD2RRgQ%2F%2FuWKsPWmqQM%2Fsx8IIIQ%3D%3D"
+  # 1 : 전체
+  
+  survice = c('getCovid19InfStateJson')
+  
+  corona_tot = corona_api(survice_key, survice[1])
+  
+}
+#setwd(path)
+#wrtie.csv(corona_tot, file="./데이터/corona_total.csv", row.names=F)
+```
+
+## 코로나 데이터 전처리
+
+```{r}
+setwd(path)
+corona<-read.csv('./데이터/corona_total.csv', head=TRUE)
+corona$stateDt<-parse_date_time(corona$stateDt, "ymd")
+corona$stateDt<-as.Date(corona$stateDt)
+corona$stateDt[224]<-as.Date("2020-02-01")
+corona<-corona[,-c(1,7,12,14,15)] # x, createDt, stateTime, updateDt, seq
+
+corona_proc<-corona %>% select(-c(accDefRate, accExamCnt, accExamCompCnt))
+corona_proc[c(224:221),c(1,2,3,4,5,6)]<-0  #2월1일~4일 0 대체 (데이터가 불분명함)
+
+
+#시작일 지정
+start_date <- as.Date("2020-02-01")
+#종료일 지정
+end_date <- as.Date("2020-06-30")
+
+date_set <-seq(as.Date(start_date), as.Date(end_date), by = "day")
+
+idx<-c()
+for(i in 0:150){
+  idx<-c(idx,min(which(corona$stateDt==date_set[151-i])))
+}
+
+corona_ex<-corona_proc[idx,]
+corona_ex2<-corona_ex %>% mutate(month=month(corona_ex$stateDt), day=day(corona_ex$stateDt))
+
+# (2월 2일 확진자-2월 1일 확진자) == 신규확진자
+diff<-c()
+for(i in 1:(nrow(corona_ex2)-1)){
+  diff<-c(diff,corona_ex$decideCnt[i]-corona_ex$decideCnt[i+1])
+}
+diff<-c(diff,0)
+
+corona_ex_final<-cbind(corona_ex2, diff)  
+
+
+```
+
+
+
+# 날씨 데이터
+
+## Open Api에서 데이터 가져오기
+```{r}
+nalssi_api = function(loc, sdt, edt){
+  if(!require(XML)){install.packages("XML"); library(XML)}
+  
+  survice_key = "2C43OUIGBDX0yB6la9ytSzNlqGEFV5AqM5TB3hi9pDIeCampo9IL7ur8KJjKD2RRgQ%2F%2FuWKsPWmqQM%2Fsx8IIIQ%3D%3D"
+  
+  shr = "00"
+  ehr = "23"
+  nr = 999
+  j=1
+  
+  nalssi = NULL
+  while(nr == 999){
+    url = paste0('http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList', 
+                 '?serviceKey=', survice_key, 
+                 "&pageNo=", j,  
+                 "&numOfRows=999",
+                 "&dataType=XML",
+                 "&dataCd=ASOS",
+                 "&dateCd=HR",
+                 "&startDt=", sdt,
+                 "&startHh=", shr,
+                 "&endDt=", edt,
+                 "&endHh=", ehr,
+                 "&stnIds=", loc, "&")
+    
+    mugi = xmlTreeParse(url, useInternalNodes = T, encoding = "UTF-8")
+    items = xmlRoot(mugi)[[2]][["items"]]
+    
+    nal_temp = list()
+    
+    for(i in 1:xmlSize(items)){
+      temp = xmlSApply(items[[i]], xmlValue)
+      nal_temp[[i]] = data.frame(matrix(temp, nrow = 1))
+      colnames(nal_temp[[i]]) = names(temp)
+    }
+    
+    col_leng = unlist(lapply(nal_temp, ncol))
+    nal_tot = data.frame(matrix(NA, nrow = length(nal_temp), 
+                                ncol = max(col_leng)))
+    colnames(nal_tot) = colnames(nal_temp[[which.max(col_leng)]])
+    
+    for(i in 1:length(nal_temp)){
+      nal_tot[i, colnames(nal_temp[[i]])] = unlist(nal_temp[[i]])
+    }
+    
+    nr = nrow(nal_tot)
+    nalssi = rbind(nalssi, nal_tot)
+    j = j + 1
+  }
+  
+  return(nalssi)
+}
+
+loc = c(seoul = 108, daegu = 143)
+sdt = 20190201
+edt = 20200531
+seoul_nalssi = nalssi_api(loc[1], sdt, edt)
+daegu_nalssi = nalssi_api(loc[2], sdt, edt)
+```
+
+## 날씨 데이터 전처리
+
+```{r}
+nalssi2 = rbind(seoul_nalssi, daegu_nalssi)
+
+#write.table(nalssi2, "./데이터/날씨.txt", sep=",", row.names=F)
+#sapply(nalssi, function(x) sum(is.na(x))) : missing value는 없음
+
+# 중요한 행만
+
+nal_res = nalssi2[,c(1, seq(4, 8, 2), 12, 
+                     20, 22, 23, 32, 34:38)]
+nal_res[,- c(1, 14)] = sapply(nal_res[,- c(1, 14)], as.numeric)
+nal_res$tm = as.POSIXct(nal_res$tm)
+nal_res$tm = as.character(nal_res$tm)
+nal_res[,c(3,6,7,8)]<-0
+nalssi<-nal_res
+
+morning = c(paste0("0", 6:9), "10")
+lunch = as.character(11:15)
+evening = as.character(16:20)
+
+{
+  nalssi$time[hour(nalssi$tm) %in% as.numeric(morning)] = "morning"
+  nalssi$time[hour(nalssi$tm) %in% as.numeric(lunch)] = "lunch"
+  nalssi$time[hour(nalssi$tm) %in% as.numeric(evening)] = "evening"
+  nalssi = nalssi[!is.na(nalssi$time),]
+  
+  nalssi = nalssi[nalssi$tm %in% as.character(time_flow$time), ]
+  
+  nalssi = nalssi[,c(14, 1, 15, 2, 5, 4, 3, 8)]
+  
+  nalssi$STD_YMD = unlist(lapply(strsplit(nalssi$tm, " "), head, 1))
+  nalssi = nalssi %>% group_by(stnNm, STD_YMD, time) %>%
+    summarize(ta = mean(ta), hm = mean(hm), ws = mean(ws), rn = mean(rn), dsnw = mean(dsnw)) %>%
+    data.frame()
+  
+  colnames(nalssi) = c("SIDO_NM", "STD_YMD", "time", "ondo", "subdo", "pung", "rain", "snow")
+  nalssi
+  nalssi$SIDO_NM[nalssi$SIDO_NM == "서울"] = "서울특별시"
+  nalssi$SIDO_NM[nalssi$SIDO_NM == "대구"] = "대구광역시"
+  nalssi$STD_YMD = as.Date(nalssi$STD_YMD)
+  nalssi$STD_Y = as.character(year(nalssi$STD_YMD))
+}
+
+
+```
+
+# 공휴일 데이터
+
+```{r}
+suppressWarnings({
+  
+  library(glue)
+  
+  library(XML)
+  
+  library(stringr)
+  
+})
+
+
+api.key <- 'LL%2FWwEZVOVH0Zl%2BA4ukk09hBFr06qaWdqnjIm%2ByV7WO1O92U5Dj4IcgEHK4Od7pdTibXe662u1oLZxMmKPwIyQ%3D%3D'
+
+
+
+url.format <- 
+  
+  'http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?ServiceKey={key}&solYear={year}&solMonth={month}'
+
+
+
+holiday.request <- function(key, year, month) glue(url.format)
+result_name<-c()
+result_date<-c()
+result_Remark<-c()
+
+for(j in c(2019,2020)){
+  for(m in 1:12){
+    data <- xmlToList(holiday.request(api.key, j, str_pad(m, 2, pad=0)))
+    
+    items <- data$body$items
+    
+    for(item in items){
+      
+      
+      result_name<-c(result_name,item$dateName)
+      result_date<-c(result_date,item$locdate)
+      
+    }
+    
+  }
+}
+
+result_holiday<-data.frame(dateName=result_name, locdate=result_date)
+result_holiday<-rbind(result_holiday, c("제헌절", "20190717")) 
+# 국경일이지만 관공서의 공휴일이 아닌데 공휴일로 넣어줬습니다.
+result_holiday$locdate<-as.Date(ymd(result_holiday$locdate))
+result_holiday<-result_holiday[order(result_holiday$locdate),]
+holiday=result_holiday
+#setwd(path)
+#write.csv(holiday, "./데이터/holiday.csv", row.names=F)
+```
+
+
+# 주민등록 인구 데이터
+
+```{r}
+setwd(path)
+jumin_seoul = read.table("./데이터/행정구역_읍면동_별_5세별_주민등록인구_서울시_201906.txt",
+                         skip = 1, header=T, sep=",")
+jumin_daegu = read.table("./데이터/행정구역_읍면동_별_5세별_주민등록인구_대구시_201906.txt",
+                         skip = 1, header=T, sep=",")
+
+jumin_seoul = jumin_seoul %>% filter(항목 == "총인구수 (명)")
+jumin_daegu = jumin_daegu %>% filter(항목 == "총인구수 (명)")
+jumin = rbind(jumin_seoul, jumin_daegu)
+jumin$항목 = NULL
+colnames(jumin)[1] = "HDONG_NM"
+
+jumin = melt(jumin, id.vars = c("HDONG_NM", "계"),
+             variable.name = "age",
+             value.name = "pop")
+
+levels(jumin$age) = str_replace_all(levels(jumin$age), "[X|\\.|세]", "")
+levels(jumin$age)[1:2] = c("0004", "0509")
+
+colnames(jumin)[2] = "tot_pop"
+jumin = jumin %>% 
+  group_by(HDONG_NM) %>%
+  arrange(HDONG_NM, age) %>%
+  data.frame() %>%
+  mutate(rate = pop/tot_pop)
+
+jumin = dcast(jumin, 
+              HDONG_NM + tot_pop ~ age,
+              value.var = "rate")
+
+colnames(jumin)[3:23] = paste0("age_", colnames(jumin)[3:23])
+jumin$HDONG_NM[jumin$HDONG_NM == "신당제5동"] = "신당5동"
+
+# 나이대별로 분류하기
+jumin1 = jumin[,1:2]
+jumin1$age_10D = jumin$age_0004 + jumin$age_0509
+jumin1$age_10 = jumin$age_1014 + jumin$age_1519
+jumin1$age_20 = jumin$age_2024 + jumin$age_2529
+jumin1$age_30 = jumin$age_3034 + jumin$age_3539
+jumin1$age_40 = jumin$age_4044 + jumin$age_4549
+jumin1$age_50 = jumin$age_5054 + jumin$age_5559
+jumin1$age_60 = jumin$age_6064 + jumin$age_6569
+jumin1$age_70 = jumin$age_7074 + jumin$age_7579
+jumin1$age_80U = jumin$age_8084 + jumin$age_8589 +
+  jumin$age_9094 + jumin$age_9599 + jumin$age_100
+
+jumin = jumin1
+
+```
+
+
+# 기타
+
+## 지도 데이터
+
+```{r}
+
+# knit 로 실행하기보다 R 또는 Rstudio에서 직접 실행해 주세요.
+#setwd(path)
+# {
+#   empty_theme = theme(legend.position = "right",
+#                       legend.title = element_blank(),
+#                       legend.text = element_text(size = 8),
+#                       axis.title = element_blank(),
+#                       axis.text = element_blank(),
+#                       axis.ticks = element_blank(),
+#                       panel.background = element_blank()) 
+#   # 서울시 전체 지도
+#   {
+#     seoulmap = st_read("./데이터/seoul.shp", stringsAsFactors = F)
+#     Encoding(seoulmap$SIG_KOR_NM) = "CP949"
+#     
+#     seoul = seoulmap %>% select(SIG_KOR_NM)
+#     
+#     seoulmap_sp = as(seoul, "Spatial")
+#     
+#     seoulmap_longlat = spTransform(seoulmap_sp,  
+#                                    CRS("+proj=longlat"))
+#     seoul_tot = fortify(seoulmap_longlat)
+#     
+#     levels(seoul_tot$group) = seoul$SIG_KOR_NM
+#     
+#     seoul_gu_center = read.csv("./데이터/seoul_gu_center.txt", sep=",",encoding = "CP949")
+#     
+#   }
+#   
+#   seoul_base_map = ggplot(seoul_tot) +
+#     geom_polygon(aes(x = long, y = lat, group = group), fill = "white", col = "lightgrey") +
+#     geom_text(data = seoul_gu_center,
+#               aes(x = long, y = lat, label = group), size = 2.8, col = "lightgrey") +
+#     empty_theme  +
+#     coord_cartesian(ylim = c(37.54, 37.7), xlim = c(126.96, 127.12)) +
+#     theme(legend.position = "top")
+#     
+#   
+#   # 대구 지도
+#   {
+#     daegumap = st_read("./데이터/daegu.shp", stringsAsFactors = F)
+#     Encoding(daegumap$SIG_KOR_NM) = "CP949"
+#     
+#     daegu = daegumap %>% select(SIG_KOR_NM)
+#     
+#     daegumap_sp = as(daegu, "Spatial")
+#     
+#     daegumap_longlat = spTransform(daegumap_sp,  
+#                                    CRS("+proj=longlat"))
+#     daegu_tot = fortify(daegumap_longlat)
+#     
+#     levels(daegu_tot$group) = daegu$SIG_KOR_NM[floor(as.numeric(levels(daegu_tot$group)))]
+#     daegu_gu_center = daegu_tot %>% select(long, lat, group) %>%
+#       group_by(group) %>%
+#       summarize(long = mean(long),
+#                 lat = mean(lat))
+#     } 
+# daegu_base_map = ggplot() +
+# coord_cartesian(ylim = c(35.785, 35.885), xlim = c(128.58, 128.73)) +
+#   empty_theme +
+#   theme(legend.position = "top")
+#   
+# }
+
+```
+
+## 변수 및 데이터 저장
+
+```{r}
+setwd(path)
+#save(map_meta, age_flow, time_flow, file="./코드/유동인구.rdata")
+save(card, file="./코드/카드.rdata")
+save(nalssi, file="./코드/날씨.rdata")
+save(holiday, file="./코드/공휴일.rdata")
+save(jumin, file="./코드/주민등록인구.rdata")
+save(topic, p_n, count, file = "./코드/SNS.rdata")
+save(corona_ex_final, file="./코드/코로나확진자수.rdata")
+#save(seoul_base_map, daegu_base_map, gg_map_daegu, gg_map_seoul, file="./코드/지도.rdata")
+#save(seoul_tot, daegu_tot, seoul_gu_center, daegu_gu_center, label, file="./코드/전체지도.rdata")
+```
+
+
+
+
+
+```
+
+

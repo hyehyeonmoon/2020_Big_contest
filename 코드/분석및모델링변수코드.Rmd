@@ -1,0 +1,553 @@
+---
+title: "분석(보고서) 및 예측변수 생성 코드"
+author: "시대의 분석가(문혜현, 정세린, 부대권)"
+date: "`r format(Sys.Date())`"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 7
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_section: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=F, fig.align = "center", message=F, warning=F, fig.height = 6)
+```
+
+# 사전준비
+
+## Package 설치하기
+
+```{r}
+if(!require(readxl)){install.packages("readxl"); library(readxl)}
+if(!require(sf)){install.packages("sf"); library(sf)}
+if(!require(rgdal)){install.packages("rgdal");library(rgdal)}
+if(!require(maptools)){install.packages("maptools"); library(maptools)}
+if(!require(dplyr)){install.packages("dplyr"); library(dplyr)}
+if(!require(reshape2)){install.packages("reshape2"); library(reshape2)}
+if(!require(ggplot2)){install.packages("ggplot2"); library(ggplot2)}
+if(!require(plotly)){install.packages("plotly"); library(plotly)}
+if(!require(scales)){install.packages("scales"); library(scales)}
+if(!require(patchwork)){
+  if(!require(devtools)){install.packages("devtools")}
+  devtools::install_github("thomasp85/patchwork"); library(plotly)
+}
+if(!require(stringr)){install.packages("stringr"); library(stringr)}
+if(!require(lubridate)){install.packages("lubridate"); library(lubridate)}
+if(!require(gridExtra)){install.packages("gridExtra"); library(gridExtra)}
+if(!require(car)){install.packages("car"); library(car)}
+if(!require(nortest)){install.packages("nortest"); library(nortest)}
+if(!require(tseries)){install.packages("tseries"); library(tseries)}
+```
+
+## 데이터 불러오기
+
+```{r}
+setwd("C:\\Users\\moonf\\Desktop\\결과물") # 경로 설정해줍니다.
+path<-"C:\\Users\\moonf\\Desktop\\결과물"
+
+load("./코드/유동인구.rdata")
+load("./코드/카드.rdata")
+load("./코드/날씨.rdata")
+load("./코드/공휴일.rdata")
+load("./코드/주민등록인구.rdata")
+load("./코드/코로나확진자수.rdata")
+
+load("./코드/지도.rdata")
+load("./코드/전체지도.rdata")
+
+```
+
+## 시각화 사전 옵션
+
+```{r}
+basic_theme = theme(axis.text.x = element_text(angle = 60, hjust = 1),
+                    legend.position = "top",
+                    panel.background = element_rect(fill = "white",
+                                                    color = "white"),
+                    panel.grid.major.x = element_line(color = "grey", linetype = "dotted"),
+                    panel.grid.major.y = element_line(color = "lightsteelblue"),
+                    panel.grid.minor = element_line(color = "lightgrey", linetype = "dotted"),
+                    axis.ticks = element_blank(),
+                    strip.background = element_blank())
+```
+
+
+# 데이터 분석
+
+## KNN 사용하여 Trend, Cycle, Cycle size 추출하기
+
+```{r}
+#시간 구분 지정
+morning = c(paste0("0", 6:9), "10")
+lunch = as.character(11:15)
+evening = as.character(16:20)
+
+
+# time에 morning, lunch, evening 집어넣으면 시간대별 합으로 유동인구 만듦
+time_chuchul = function(data, time){
+  ret = data[data$hour %in% time,] %>%
+    group_by(STD_Y, STD_YM, STD_YMD, weekend, weekday, SIDO_NM, SGNG_NM, HDONG_NM, HDONG_CD) %>%
+    summarize(flow_pop = sum(flow_pop)) %>%
+    data.frame()
+  
+  return(ret)
+}
+
+# 분리 함수
+# base는 knn
+# k값이 짝수일 경우 랜덤성이 나타날 수 있으니 set.seed로 seed값을 넣고 돌리면 좋습니다
+# func으로 k개 근접한 값들을 어떻게 조합할지 조정 가능
+# mean, median 등등
+
+knn_reg = function(x, y, k, func = mean){
+  
+  knn_ret = c()
+  
+  for(j in 1:length(x)){
+    dist = abs(x[j] - x)
+    dupl = duplicated(dist)
+    dist[dupl] = dist[dupl] + runif(sum(dupl), -0.1, 0.1)
+    near_index = head(order(dist), k)
+    
+    knn_ret[j] = func(y[near_index])
+  }
+  return(knn_ret)
+  
+}
+
+# Trend, Cycle, Cycle size 분리
+
+cycle_trend = function(data, k, func = mean){
+  
+  knn_reg = function(x, y, k, func = mean){
+    
+    knn_ret = c()
+    
+    for(j in 1:length(x)){
+      dist = abs(x[j] - x)
+      dupl = duplicated(dist)
+      dist[dupl] = dist[dupl] + runif(sum(dupl), -0.1, 0.1)
+      near_index = head(order(dist), k)
+      
+      knn_ret[j] = func(y[near_index])
+    }
+    return(knn_ret)
+    
+  }
+  
+  H_NM = unique(data$HDONG_NM)
+
+  ret = data
+  ret$trend = NA
+  ret$cycle_size = NA
+  ret$cycle = NA
+  
+  for(i in 1:length(H_NM)){
+    H_temp = data[data$HDONG_NM == H_NM[i], ] 
+    knn_fl_1 = knn_reg(x = H_temp$STD_YMD, y = H_temp$flow_pop, k, func)
+    knn_fl = knn_reg(x = H_temp$STD_YMD, y = knn_fl_1, k, func)
+    range_cycle = H_temp$flow_pop - knn_fl
+    knn_ran = knn_reg(x = H_temp$STD_YMD, y = range_cycle, k, function(x) diff(range(x)))
+    knn_ran = knn_reg(x = H_temp$STD_YMD, y = knn_ran, k, mean)
+    
+    ret$trend[data$HDONG_NM == H_NM[i]] = knn_fl
+    ret$cycle_size[data$HDONG_NM == H_NM[i]] = knn_ran
+  }
+  ret$cycle = (ret$flow_pop - ret$trend)/ret$cycle_size
+  
+    
+  return(ret)
+}
+
+# 시간대별로 분리하여 저장
+
+
+{
+  morn_flow = cycle_trend(time_chuchul(time_flow, morning), k = 7)
+  lunc_flow = cycle_trend(time_chuchul(time_flow, lunch), k = 7)
+  even_flow = cycle_trend(time_chuchul(time_flow, evening), k = 7)
+  
+  morn_flow$time = "morning"
+  lunc_flow$time = "lunch"
+  even_flow$time = "evening"
+  
+  time_split_flow = rbind(morn_flow, lunc_flow, even_flow)
+  
+  time_split_flow$weeknum = strftime(time_split_flow$STD_YMD, "%V")
+  
+
+}
+```
+
+### 변수 및 데이터 저장
+
+```{r}
+setwd(path)
+save(morning, lunch, evening, time_chuchul, cycle_trend, knn_reg, file="./코드/cycle_trend_function.rdata")
+save(time_split_flow, file="./코드/유동인구_cycle_trend.rdata")
+```
+
+## Trend와 Cycle size 분석
+
+### Trend와 Cycle size의 선형 관계
+
+동별 평균 trend, cycle size에 log를 취한 뒤 비교하며 진행하였습니다.
+
+```{r}
+test_time = time_split_flow %>% group_by(HDONG_NM) %>% 
+  summarize(cycle_size = mean(cycle_size), trend = mean(trend))
+```
+
+(1) trend, Cycle_size 정규성 검정-qq plot
+```{r}
+# (1) trend, Cycle_size 정규성 검정-qq plot
+par(mfrow = c(1, 2))
+qqPlot(log(test_time$trend), pch = 16, col = "steelblue", col.lines = "limegreen",
+       main = "Trend", ylab = "log scale Trend")
+qqPlot(log(test_time$cycle_size), pch = 16, col = "steelblue", col.lines = "limegreen",
+       main = "Cycle Size", ylab = "log scale Cycle Size")
+```
+
+(2) trend 정규성 검정
+```{r}
+# (2) trend 정규성 검정
+dat = log(test_time$trend)
+
+jarque.bera.test(dat)
+shapiro.test(dat)
+lillie.test(dat)
+ad.test(dat)
+```
+
+(3)Cycle size 정규성 검정
+```{r}
+# (3)Cycle size 정규성 검정
+dat = log(test_time$cycle_size)
+
+jarque.bera.test(dat)
+shapiro.test(dat)
+lillie.test(dat)
+ad.test(dat)
+```
+
+(4) 단순회귀분석
+```{r}
+# (4) 단순회귀분석
+fit = lm(log(trend) ~ log(cycle_size), test_time)
+summary(fit)
+
+
+fit = lm(log(cycle_size) ~ log(trend), test_time)
+summary(fit)
+
+```
+
+### Trend와 Cycle size의 변화로 본 코로나 이전과 이후 유동인구(Paired Two Sample T-test)
+
+```{r}
+test_time = time_split_flow %>% group_by(HDONG_NM, STD_Y) %>% 
+  summarize(cycle_size = mean(cycle_size), trend = mean(trend)) %>%
+  data.frame()
+
+
+```
+
+(1) 2019년과 2020년의 Trend와 Cycle size의 동별 평균을 나타낸 Box-Plot
+```{r}
+# (1) 2019년과 2020년의 Trend와 Cycle size의 동별 평균을 나타낸 Box-Plot
+ggplot(test_time) +
+  geom_boxplot(aes(x = STD_Y, y = trend, col = STD_Y)) + 
+  basic_theme +
+  ggplot(test_time) +
+  geom_boxplot(aes(x = STD_Y, y = cycle_size, col = STD_Y)) + 
+  basic_theme
+
+
+```
+
+(2) trend, cycle_size 정규성 검정
+```{r}
+# (2) trend, cycle_size 정규성 검정
+par(mfrow = c(1, 2))
+
+qqPlot(log(test_time$trend[test_time$STD_Y == "2019"]), pch = 16, col = "steelblue", col.lines = "limegreen",
+       ylab = "log scale Trend in 2019")
+qqPlot(log(test_time$cycle_size[test_time$STD_Y == "2019"]), pch = 16, col = "steelblue", col.lines = "limegreen",
+       ylab = "log scale Trend in 2020")
+
+qqPlot(log(test_time$trend[test_time$STD_Y == "2020"]), pch = 16, col = "steelblue", col.lines = "limegreen",
+       ylab = "log scale Cycle Size of 2019")
+qqPlot(log(test_time$cycle_size[test_time$STD_Y == "2020"]), pch = 16, col = "steelblue", col.lines = "limegreen",
+       ylab = "log scale Cycle Size of 2020")
+
+```
+
+(3) Paired Two Sample T-test
+```{r}
+# (3) Paired Two Sample T-test
+t.test(log(test_time$trend[test_time$STD_Y == "2019"]), log(test_time$trend[test_time$STD_Y == "2020"]), paired = T)
+t.test(log(test_time$cycle_size[test_time$STD_Y == "2019"]), log(test_time$cycle_size[test_time$STD_Y == "2020"]), paired = T)
+
+```
+
+## 유동인구 예측변수 분석
+
+### 일주일 전 trend/Cycle size 요소
+
+일주일 전의 평균 cycle size가 평균 trend에 영향을 주는지 살펴보았습니다.
+
+```{r}
+# 검정용 데이터 정제
+
+{
+
+
+fortest = NULL
+
+time = data.frame(morning = morning, lunch = lunch, evening = evening)
+for(k in 1:3){
+  
+  mor = time_chuchul(time_flow, time[, k])
+  
+  fortest_temp = NULL
+  
+  for(i in c("2019", "2020")){
+    
+    temp = mor[mor$STD_Y == i,]
+    
+    days = sort(unique(temp$STD_YMD))
+    
+  
+    for(j in 13:length(days)){
+      
+      temp_1 = cycle_trend(temp[temp$STD_YMD %in% days[(j-12):j],], 
+                           k = 7)
+      
+      temp_2 = temp_1 %>% 
+        filter(STD_YMD %in% days[(j-6):j]) %>%
+        group_by(HDONG_NM) %>%
+        summarize(STD_YMD = max(STD_YMD),
+                  trend = mean(trend),
+                  cycle_size = mean(cycle_size)) %>%
+        data.frame()
+      
+      fortest_temp = rbind(fortest_temp, temp_2)
+    }
+  }
+  fortest_temp = data.frame(time = colnames(time)[k], fortest_temp)
+  
+  fortest = rbind(fortest, fortest_temp)
+}
+
+fortest$STD_Y = year(fortest$STD_YMD)
+}
+
+
+{fortest_lastweek = fortest
+  fortest_lastweek$STD_YMD = fortest_lastweek$STD_YMD + 7
+  colnames(fortest_lastweek)[4:5] = c("last_week_t", "last_week_c")
+  
+  fortest_total = left_join(fortest, fortest_lastweek, by = c("time" = "time", "HDONG_NM" = "HDONG_NM",
+                                                              "STD_YMD" = "STD_YMD", "STD_Y" = "STD_Y"))}
+
+```
+
+(1) 정규성 없음을 확인
+```{r}
+# (1) 정규성 없음을 확인
+par(mfrow = c(1, 2))
+qqPlot(log(fortest_total$cycle_size))
+qqPlot(log(fortest_total$trend))
+
+```
+
+(2) 비모수적 방법의 상관분석
+```{r}
+# (2) 비모수적 방법의 상관분석
+cor.test(log(fortest_total$cycle_size), log(fortest_total$last_week_t))
+cor.test(log(fortest_total$trend), log(fortest_total$last_week_c))
+```
+
+(3) 다중회귀분석을 통한 다중공선성 확인
+```{r}
+# (3) 다중회귀분석을 통한 다중공선성 확인
+
+a = lm(log(cycle_size) ~ log(last_week_t) + log(last_week_c), data = fortest_total)
+summary(a)
+vif(a)
+
+a = glm(log(trend) ~ log(last_week_t) + log(last_week_c), data = fortest_total)
+summary(a)
+vif(a)
+
+
+```
+
+### 신용카드 
+
+```{r}
+card_sum = card %>% group_by(year, STD_DD, HDONG_NM) %>%
+  summarize(CNT = sum(USE_CNT),
+            AMT = sum(USE_AMT)) %>%
+  data.frame()
+
+a = left_join(time_split_flow, card_sum, by = c("HDONG_NM" = "HDONG_NM", "STD_YMD" = "STD_DD"))
+
+```
+
+(1) 일별 신용카드 매출과 유동인구 비교
+```{r}
+# (1) 일별 신용카드 매출과 유동인구 비교
+ggplot(a %>% group_by(STD_Y, STD_YMD) %>% 
+         summarize(flow_pop = sum(flow_pop), CNT = sum(CNT))) + 
+         geom_line(aes(x = STD_YMD, y = flow_pop), col = "limegreen") +
+  geom_line(aes(x = STD_YMD, y = CNT), col = "lightsteelblue3") +
+  basic_theme +
+  facet_grid(~STD_Y, scales = "free")
+
+# 가공
+card_last_week = NULL
+for(j in c("2019", "2020")){
+  temp = card_sum[card_sum$year == j,]
+  days = sort(unique(temp$STD_DD))
+  
+  for(i in 7:length(days)){
+    temp1 = temp[temp$STD_DD %in% days[(i-6):i],] %>% group_by(HDONG_NM) %>%
+      summarize(STD_Y = unique(year),
+                STD_YMD = max(STD_DD) + 7,
+                USE_CNT = mean(CNT),
+                USE_AMT = mean(AMT)) %>%
+      data.frame()
+    card_last_week = rbind(card_last_week, temp1)
+  }
+}
+fortest_total$STD_Y = as.character(fortest_total$STD_Y)
+card_test = left_join(fortest_total, card_last_week, by = c("STD_Y" = "STD_Y", "STD_YMD" = "STD_YMD", "HDONG_NM" = "HDONG_NM"))
+
+```
+
+
+(2) 정규성 없음을 확인
+```{r}
+# (2) 정규성 없음을 확인
+par(mfrow = c(1, 1))
+hist(log(card_test$USE_AMT))
+
+```
+
+(3) 비모수적 상관분석 시행
+```{r}
+# (3) 비모수적 상관분석 시행
+cor.test(log(card_test$USE_AMT), log(card_test$trend))
+cor.test(log(card_test$trend),log(card_test$USE_AMT))
+```
+
+(4) 다중회귀분석을 통한 다중공선성 확인
+```{r}
+# (4) 다중회귀분석을 통한 다중공선성 확인
+fit1 = glm(log(trend) ~ log(USE_AMT) + log(last_week_t) + log(last_week_c), data = card_test)
+summary(fit1)
+vif(fit1)
+
+
+fit2 = glm(log(cycle_size) ~ log(last_week_c) + log(last_week_t) + log(USE_AMT), data = card_test)
+summary(fit2)
+vif(fit2)
+
+```
+
+### 공휴일
+
+```{r}
+z = left_join(time_split_flow, holiday[,1:2], by = c("STD_YMD" = "locdate"))
+z$holiday = 0
+z$holiday[!is.na(z$dateName)] = 1
+
+
+# 5월 1일 근로자의 날
+
+y = z %>% group_by(STD_YMD, STD_Y, time, holiday, weekday) %>%
+  summarize(cycle = mean(cycle),
+            trend = mean(trend),
+            cycle_size = mean(cycle_size)) %>%
+  group_by(time, weekday, STD_Y) %>%
+  mutate(mean_cycle = median(cycle))
+```
+
+(1) 공휴일을 이용한 outlier 처리
+```{r}
+# (1) 공휴일을 이용한 outlier 처리
+ggplot(y) +
+  geom_rect(aes(xmin = STD_YMD - 0.5, xmax = STD_YMD + 0.5, ymin = holiday * (- Inf), ymax = holiday * Inf),
+            col = NA, fill = "plum", alpha = 0.5) +
+  geom_line(aes(x = STD_YMD, y = cycle, col = time)) + 
+  facet_grid(time~STD_Y, scales = "free") +
+  basic_theme
+
+
+```
+
+# 유동인구 모델링 input 데이터 만들기
+
+## time data
+
+```{r}
+corona_ex_final2<-corona_ex_final %>% select(stateDt, diff)
+corona_ex_final2<-as.data.frame(corona_ex_final2)
+corona_ex_final2<-corona_ex_final2[order(corona_ex_final2$stateDt),]
+rownames(corona_ex_final2)<-NULL
+colnames(corona_ex_final2)<-c("STD_YMD", "diff")
+
+corona = corona_ex_final2 %>%
+  data.frame()
+
+nalssi = nalssi %>% mutate(rain_snow = rain + snow) %>%
+  select(STD_YMD, SIDO_NM, time, ondo, subdo, rain_snow)
+
+time_split_flow$STD_YM = time_split_flow$weeknum = time_split_flow$weekend = NULL
+
+time_split_flow = time_split_flow[,c("STD_Y", "STD_YMD", "SIDO_NM", "SGNG_NM", "HDONG_NM", "HDONG_CD", "time", "weekday", "flow_pop")]
+
+card_sum = card %>% group_by(STD_DD, HDONG_CD) %>%
+  summarize(card_use = sum(USE_AMT))
+
+time_data = left_join(time_split_flow, card_sum, by = c("STD_YMD" = "STD_DD", "HDONG_CD" = "HDONG_CD"))
+time_data$holiday = 0
+time_data$holiday[time_data$STD_YMD %in% c(holiday[,2], "2019-05-01", "2020-05-01")] = 1 #근로자의날 추가해주었습니다.
+time_data = left_join(time_data, corona, by = c("STD_YMD" = "STD_YMD"))
+time_data$diff[is.na(time_data$diff)] = 0
+colnames(time_data)[12] = "day_corona"
+time_data = left_join(time_data, nalssi, by = c("STD_YMD" = "STD_YMD", "SIDO_NM" = "SIDO_NM", "time" = "time"))
+
+
+```
+
+
+## nontime data
+
+```{r}
+jumin$age_80U = jumin$age_80 # +jumin$age_90U=null
+
+nontime_data = left_join(unique(time_data[,c(5:7)]), jumin[,c(1, 2, 11)], by = c("HDONG_NM" = "HDONG_NM"))
+
+nontime_data = left_join(nontime_data, unique(map_meta[,c(4:5)]), by = c("HDONG_CD" = "HDONG_CD"))
+
+
+time_data$SIDO_NM = time_data$SGNG_NM = NULL
+time_data = time_data %>% arrange(HDONG_NM, time, STD_YMD)
+nontime_data = nontime_data %>% arrange(HDONG_NM, time)
+
+# write.table(time_data, file = "./데이터/time_data.txt", fileEncoding = "UTF-8", row.names = F)
+# write.table(nontime_data, file = "./데이터/nontime_data.txt", fileEncoding = "UTF-8", row.names = F)
+```
+
+
+
+

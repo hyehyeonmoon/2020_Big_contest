@@ -1,0 +1,784 @@
+---
+title: "분석(ppt) 및 시각화 코드"
+author: "시대의 분석가(문혜현, 정세린, 부대권)"
+date: "`r format(Sys.Date())`"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 7
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_section: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=F, fig.align = "center", message=F, warning=F, fig.height = 7)
+```
+
+# 사전준비
+
+## Package 설치
+
+```{r}
+ if(!require(readxl)){install.packages("readxl"); library(readxl)}
+if(!require(stringr)){install.packages("stringr"); library(stringr)}
+if(!require(dplyr)){install.packages("dplyr"); library(dplyr)}
+if(!require(reshape2)){install.packages("reshape2"); library(reshape2)}
+if(!require(ggplot2)){install.packages("ggplot2"); library(ggplot2)}
+if(!require(plotly)){install.packages("plotly"); library(plotly)}
+if(!require(scales)){install.packages("scales"); library(scales)}
+if(!require(patchwork)){
+        if(!require(devtools)){install.packages("devtools")}
+        devtools::install_github("thomasp85/patchwork"); library(plotly)
+}
+
+if(!require(lubridate)){install.packages("lubridate"); library(lubridate)}
+if(!require(car)){install.packages("car"); library(car)}
+if(!require(nortest)){install.packages("nortest"); library(nortest)}
+if(!require(tseries)){install.packages("tseries"); library(tseries)}
+if(!require(bootcluster)){install.packages("bootcluster"); library(bootcluster)}
+if(!require(gridExtra)){install.packages("gridExtra"); library(gridExtra)}
+if(!require(colorspace)){install.packages("colorspace");   library(colorspace)}
+
+```
+
+# 데이터 불러오기
+
+```{r}
+setwd("C:\\Users\\moonf\\Desktop\\결과물") # 경로를 설정해줍니다.
+path<-"C:\\Users\\moonf\\Desktop\\결과물"
+load(file="./코드/유동인구_cycle_trend.rdata")
+load("./코드/cycle_trend_function.rdata")
+load("./코드/유동인구.rdata")
+load("./코드/코로나확진자수.rdata")
+
+load("./코드/카드.rdata")
+load("./코드/SNS.rdata")
+
+load("./코드/지도.rdata")
+load("./코드/전체지도.rdata")
+
+
+
+datalab_t<-read_excel("./데이터/datalab_국내여행.xlsx", sheet = "개요",range = "A7:B523", col_names = TRUE, na = "NA") 
+datalab_f<-read_excel("./데이터/datalab_유동인구.xlsx", sheet = "개요",range = "A7:B523", col_names = TRUE, na = "NA") 
+no_travel<-read_excel("./데이터/여행을_다녀오지_않은_이유__중복응답__20200927161221.xlsx", sheet = "데이터",range = "B1:W3", col_names = F, na = "NA") 
+num_travel<-read_excel("./데이터/국내여행_횟수_20200927161405.xlsx",sheet = "데이터",range = "B1:G3", col_names = F, na = "NA" )
+exp_travel<-read_excel("./데이터/국내여행_지출액_20200927161452.xlsx",sheet = "데이터",range = "B1:G3", col_names = F, na = "NA" )
+
+
+```
+
+## 시각화 옵션 준비
+
+```{r}
+basic_theme = theme(legend.position = "top",
+                    panel.background = element_rect(fill = "white",
+                                                    color = "white"),
+                    panel.grid.major.x = element_line(color = "grey", linetype = "dotted"),
+                    panel.grid.major.y = element_line(color = "grey", size = 1),
+                    panel.grid.minor.y = element_line(color = "lightgrey", linetype = "dotted"),
+                    axis.ticks = element_blank(),
+                    strip.background = element_blank(),
+                    strip.text = element_text(size = 15),
+                    strip.placement = "outside") 
+
+
+pal1 = c("#5A87B9", "#26A6BE", "#00C1B7", "#3AD6A0", "#95E280", "#DCE66C",
+         "#FFE180")
+pal2 = c("#5A87B9", "#539FBC", "#62B4BC", "#7CC4BC", "#9AD2BD", "#B6DDBF", "#CDE4C1")
+pal3 = c("#BD434D", "#D46353", "#E7825C", "#F89F67", "#FFB971", "#FFD07B",
+         "#FFE180")
+
+col1 = pal3[3]
+col2 = pal3[7]
+
+```
+
+# 유동인구 시각화
+
+## Trend, Cycle size, Cycle 분리 시각화
+
+```{r}
+# 데이터 전처리
+p_data = time_split_flow %>% 
+        filter(HDONG_NM == "회현동", time == "morning")
+
+#시각화
+{
+flow1 = plot_ly(data = p_data %>% filter(STD_Y == "2019"),
+                x = ~STD_YMD, y = ~flow_pop) %>%
+        add_lines(line = list(color = "dimgrey")) %>%
+        add_lines(y = ~ trend, line = list(color = col1), opacity = 0.8) %>%
+        add_lines(y = ~ knn_reg(STD_YMD, knn_reg(STD_YMD, flow_pop, k = 7, func = max), k = 7),
+                  line = list(color = col2, dash = "dash"), opacity = 0.6) %>%
+        add_lines(y = ~ knn_reg(STD_YMD, knn_reg(STD_YMD, flow_pop, k = 7, func = min), k = 7),
+                          line = list(color = col2, dash = "dash"), opacity = 0.6) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            type = "date", tickformat = "%d %b <br> %Y", title = ""), 
+               yaxis = list(title = "유동인구", gridwidth = 2)) %>%
+        hide_legend()
+flow2 = plot_ly(data = p_data %>% filter(STD_Y == "2020"),
+                x = ~STD_YMD, y = ~flow_pop) %>%
+        add_lines(line = list(color = "dimgrey")) %>%
+        add_lines(y = ~ trend, line = list(color = col1), opacity = 0.8) %>%
+        add_lines(y = ~ knn_reg(STD_YMD, knn_reg(STD_YMD, flow_pop, k = 7, func = max), k = 7),
+                  line = list(color = col2, dash = "dash"), opacity = 0.6) %>%
+        add_lines(y = ~ knn_reg(STD_YMD, knn_reg(STD_YMD, flow_pop, k = 7, func = min), k = 7),
+                  line = list(color = col2, dash = "dash"), opacity = 0.6) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            type = "date", tickformat = "%d %b <br> %Y", title = ""), 
+               yaxis = list(title = "유동인구", gridwidth = 2)) %>%
+        hide_legend()
+flow = subplot(flow1, flow2, nrows = 1, shareY = T, titleX = T) %>%
+        hide_legend()
+
+trend1 = plot_ly(data = p_data %>% filter(STD_Y == "2019"),
+                 x = ~STD_YMD, y = ~trend) %>%
+        add_lines(line = list(color = col1)) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            showticklabels = F, title = "2019",
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Trend", gridwidth = 2),
+               margin = list(b = 10))
+
+trend2 = plot_ly(data = p_data %>% filter(STD_Y == "2020"),
+                 x = ~STD_YMD, y = ~trend) %>%
+        add_lines(line = list(color = col1))  %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            showticklabels = F, title = "2020",
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Trend", gridwidth = 2),
+               margin = list(b = 10)) 
+
+trend = subplot(trend1, trend2, nrows = 1, shareY = T, titleX = T) %>%
+        hide_legend()
+
+cyclesize1 = plot_ly(data = p_data %>% filter(STD_Y == "2019"),
+                 x = ~STD_YMD, y = ~ cycle_size) %>%
+        add_lines(line = list(color = col2))  %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            showticklabels = F, title = "2019",
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Cycle Size", gridwidth = 2),
+               margin = list(b = 10))
+
+cyclesize2 = plot_ly(data = p_data %>% filter(STD_Y == "2020"),
+                 x = ~STD_YMD, y = ~ cycle_size) %>%
+        add_lines(line = list(color = col2)) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            showticklabels = F, title = "2020",
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Cycle Size", gridwidth = 2),
+               margin = list(b = 10))
+
+cyclesize = subplot(cyclesize1, cyclesize2, nrows = 1, shareY = T, titleX = T) %>%
+        hide_legend()
+
+cycle1 = plot_ly(data = p_data %>% filter(STD_Y == "2019"),
+                 x = ~STD_YMD, y = ~ cycle) %>%
+        add_lines(line = list(color = "grey", width = 1)) %>%
+        layout(xaxis = list(title = "2019", showline = T, showgrid = F, showticklabels = F,
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Cycle", gridwidth = 2, range = c(-0.9, 0.9)),
+               margin = list(b = 10))
+
+cycle2 = plot_ly(data = p_data %>% filter(STD_Y == "2020"),
+                 x = ~STD_YMD, y = ~ cycle) %>%
+        add_lines(line = list(color = "grey", width = 1))  %>%
+        layout(xaxis = list(title = "2020", showline = T, showgrid = F, 
+                            showticklabels = F,
+                            titlefont = list(size = 12)), 
+               yaxis = list(title = "Cycle", gridwidth = 2),
+               margin = list(b = 10))
+cycle = subplot(cycle1, cycle2, nrows = 1, shareY = T, titleX = T) %>%
+        hide_legend()
+}
+subplot(flow, 
+        subplot(trend, cyclesize, cycle, nrows = 1, titleX = T, titleY = T, margin = 0.05),
+        nrows = 2, titleX = T, titleY = T,
+        margin = 0.05, heights = c(0.6, 0.4))
+```
+
+## 동별 유동인구 변화 시각화
+
+```{r}
+# 데이터 전처리
+allday_flow = time_chuchul(time_flow, c(paste0("0", 0:9), 10:23))
+allday_flow = cycle_trend(allday_flow, 7, mean)
+
+# 데이터 시각화
+
+p1 = seoul_base_map +
+        geom_map(data = allday_flow %>%
+                         group_by(STD_Y, SIDO_NM, SGNG_NM, HDONG_NM, HDONG_CD) %>%
+                         summarize(mean_trend = mean(trend)) %>%
+                         arrange(HDONG_NM, STD_Y) %>%
+                         group_by(HDONG_NM) %>%
+                         mutate(rate = exp(diff(log(mean_trend)))) %>%
+                         data.frame(), 
+                 map = gg_map_seoul, 
+                 aes(fill = rate, map_id = HDONG_CD)) +
+        geom_polygon(data = gg_map_seoul, 
+                 aes(x = long, y = lat, group = id), col = "white", fill = NA, size = 0.6) +
+        geom_text(data = map_meta %>%
+                          select(HDONG_NM, X_COORD, Y_COORD) %>%
+                          unique(),
+                  aes(x = X_COORD, y = Y_COORD, label = HDONG_NM), col = "white", size = 2.3) +
+        scale_fill_continuous(low = pal3[2],
+                              high = pal3[7], trans = "log")
+
+p2 = daegu_base_map +
+        geom_map(data = allday_flow %>%
+                         group_by(STD_Y, SIDO_NM, SGNG_NM, HDONG_NM, HDONG_CD) %>%
+                         summarize(mean_trend = mean(trend)) %>%
+                         arrange(HDONG_NM, STD_Y) %>%
+                         group_by(HDONG_NM) %>%
+                         mutate(rate = exp(diff(log(mean_trend)))) %>%
+                         data.frame(), 
+                 map = gg_map_daegu, 
+                 aes(fill = rate, map_id = HDONG_CD)) +
+        geom_polygon(data = gg_map_daegu, 
+                     aes(x = long, y = lat, group = id), col = "white", fill = NA) +
+        geom_text(data = map_meta %>%
+                          select(HDONG_NM, X_COORD, Y_COORD) %>%
+                          unique(),
+                  aes(x = X_COORD, y = Y_COORD, label = HDONG_NM), col = "white", size = 2.6) +
+        scale_fill_continuous(low = pal3[2],
+                              high = pal3[7], trans = "log") +
+        theme(legend.position = "none")
+
+p1/p2
+```
+
+## 시간별 유동인구 Trned 변화 시각화
+
+```{r}
+{a = time_flow
+a$time = NA
+a$time[time_flow$hour %in% morning] = "morning"
+a$time[time_flow$hour %in% lunch] = "lunch"
+a$time[time_flow$hour %in% evening] = "evening"
+
+allregion_flow = a %>% 
+        filter(!is.na(time)) %>%
+        group_by(STD_Y, STD_YMD, time) %>%
+        summarize(sum_flow = sum(flow_pop)) %>% 
+        data.frame()
+
+for(i in c("morning", "lunch", "evening")){
+        temp = allregion_flow[allregion_flow$time == i,]
+        all_trend = knn_reg(temp$STD_YMD, temp$sum_flow, 7, mean)
+        all_trend = knn_reg(temp$STD_YMD, all_trend, 7, mean)
+        cycle_range = temp$sum_flow - all_trend
+        
+        all_cycle_size = knn_reg(temp$STD_YMD, cycle_range, 7, function(x) diff(range(x)))
+        all_cycle_size = knn_reg(temp$STD_YMD, all_cycle_size, 7, mean)
+        
+        all_cycle = (temp$sum_flow - all_trend)/all_cycle_size
+        
+        allregion_flow$trend[allregion_flow$time == i] = all_trend
+        allregion_flow$cycle_size[allregion_flow$time == i] = all_cycle_size
+        allregion_flow$cycle[allregion_flow$time == i] = all_cycle
+}
+
+allregion_flow$time = factor(allregion_flow$time, levels = c("morning", "lunch", "evening"))
+}
+bytime1 = plot_ly(data = allregion_flow %>% filter(STD_Y == "2019"), 
+        x = ~ STD_YMD, y = ~ trend, color = ~time) %>%
+        add_lines(colors = rev(pal3[c(1, 4, 7)])) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            type = "date", tickformat = "%d %b <br> %Y", title = ""), 
+               yaxis = list(title = "유동인구", gridwidth = 2))
+
+bytime2 = plot_ly(data = allregion_flow %>% filter(STD_Y == "2020"), 
+                  x = ~ STD_YMD, y = ~ trend, color = ~time) %>%
+        add_lines(colors = rev(pal3[c(1, 4, 7)]), showlegend = F) %>%
+        layout(xaxis = list(showline = T, showgrid = F, 
+                            type = "date", tickformat = "%d %b <br> %Y", title = ""), 
+               yaxis = list(title = "유동인구", gridwidth = 2))
+subplot(bytime1, bytime2, shareY = T)
+```
+
+## 연령별 유동인구 변화 시각화
+
+```{r}
+#데이터 전처리
+
+age_trend = age_flow %>% group_by(STD_Y, STD_YMD, age_n) %>%
+        summarize(sum_flow = sum(flow_pop)) %>%
+        group_by(age_n) %>%
+        mutate(trend = knn_reg(STD_YMD, knn_reg(STD_YMD, sum_flow, 7, mean), 7, mean))
+
+#데이터 시각화
+plot_ly(data = age_trend %>% group_by(STD_Y, age_n) %>%
+                summarize(age_mean = mean(trend)) %>%
+                arrange(age_n, STD_Y) %>%
+                group_by(age_n) %>%
+                mutate(rate = exp(diff(log(age_mean)))) %>%
+                data.frame()) %>%
+        add_bars(x = ~age_n, y = ~age_mean, color = ~ STD_Y, colors = pal3[c(7, 1)]) %>%
+        add_lines(x = ~age_n, y = ~ rate, line = list(dash = "solid", color = pal3[3], width = 2),
+                  showlegend = F, yaxis = "y2")%>%
+        add_markers(x = ~age_n, y = ~ rate, marker = list(color = "white", line = list(width = 2, color = pal3[3])),
+                    size = 0.8, showlegend = T, yaxis = "y2", name = "전년 대비\n비율") %>%
+        layout(yaxis = list(gridwidth = 2, title = "일별 평균 유동인구"),
+               xaxis = list(title = ""),
+               yaxis2 = list(overlaying = "y",
+                             side = "right",
+                             title = "전년 대비 비율",
+                             showgrid = F,
+                             range = c(0.2, 0.858),
+                             tickformat = "%"))
+
+```
+
+# 유동인구와 신용카드 관련 시각화
+
+## 일일 유동인구와 일일 카드이용금액 비교 시각화
+
+```{r}
+#데이터 전처리
+card_totsum = card %>% group_by(year, STD_DD) %>%
+        summarize(sum_amt = sum(USE_AMT)) %>%
+        data.frame()
+
+flow_totsum = time_flow %>% group_by(STD_Y, STD_YMD) %>%
+        summarize(sum_flow = sum(flow_pop)) %>%
+        data.frame()
+card_totsum = card_totsum %>% 
+        mutate(amt_trend = knn_reg(STD_DD, 
+                                    knn_reg(STD_DD, sum_amt, 7, mean),
+                                    7, mean))
+
+flow_totsum = flow_totsum %>% 
+        mutate(flow_trend = knn_reg(STD_YMD, 
+                                    knn_reg(STD_YMD, sum_flow, 7, mean),
+                                    7, mean))
+
+
+totsum = left_join(flow_totsum, card_totsum, 
+                   by = c("STD_Y" = "year", "STD_YMD" = "STD_DD"))
+
+# 데이터 시각화
+
+tot_19 = plot_ly(data = totsum %>% filter(STD_Y == "2019")) %>%
+        add_lines(x = ~ STD_YMD, y = ~ amt_trend, type = "line",
+                  line = list(dash = "solid", width = 2, color = pal1[1]), 
+                  showlegend = T, name = "카드 이용 금액")%>%
+        add_lines(x = ~ STD_YMD, y = ~ flow_trend, type = "line",
+                  line = list(dash = "solid", width = 2, color = pal1[7]), 
+                  showlegend = T, yaxis = "y2", name = "유동인구") %>%
+        layout(yaxis = list(gridwidth = 2, title = "일일 카드 이용 금액", range = c(35.1*10^6, 63*10^6)),
+               xaxis = list(title = "", showline = T, showgrid = F),
+               yaxis2 = list(overlaying = "y",
+                             side = "right",
+                             title = "",
+                             showgrid = F,
+                             showticklabels = F,
+                             range = c(3.51*10^6, 6.3*10^6)))
+
+tot_20 = plot_ly(data = totsum %>% filter(STD_Y == "2020")) %>%
+        add_lines(x = ~ STD_YMD, y = ~ amt_trend, type = "line",
+                  line = list(dash = "solid", width = 2, color = pal1[1]), 
+                  showlegend = F, name = "카드 이용 금액")%>%
+        add_lines(x = ~ STD_YMD, y = ~ flow_trend, type = "line",
+                  line = list(dash = "solid", width = 2, color = pal1[7]), 
+                  showlegend = F, yaxis = "y4", name = "유동인구") %>%
+        layout(yaxis = list(gridwidth = 2, title = "", 
+                            showticklabels = F, range = c(35.1*10^6, 63*10^6)),
+               xaxis = list(title = "", showline = T, showgrid = F),
+               yaxis4 = list(overlaying = "y3",
+                             side = "right",
+                             title = "일일 유동인구",
+                             showgrid = F,
+                             range = c(3.51*10^6, 6.3*10^6)))
+
+subplot(tot_19, tot_20, titleY = T, margin = 0.01)
+
+```
+
+## 요일별 유동인구 평균과 카드이용금액 평균 비교 시각화
+
+```{r}
+#데이터 전처리
+
+totsum$weekday = weekdays(totsum$STD_YMD) 
+totsum$weekday = factor(totsum$weekday, paste0(c("월", "화", "수", "목", "금", "토", "일"), "요일"))
+tot_long = melt(totsum[,c(1:3, 5, 7)], id.vars = c("STD_Y", "STD_YMD", "weekday"))
+
+#데이터 시각화
+
+f = plot_ly(totsum %>%
+                group_by(STD_Y, weekday) %>%
+                summarize(sum_flow = mean(sum_flow)),
+        x = ~ weekday, y = ~ sum_flow, color = ~ STD_Y, type = "bar", colors = pal3[c(7, 1)]) %>%
+        layout(barmode = "group", 
+               yaxis = list(title = "일일 유동인구"))
+
+ca = plot_ly(totsum %>%
+                group_by(STD_Y, weekday) %>%
+                summarize(sum_amt = mean(sum_amt)),
+        x = ~ weekday, y = ~ sum_amt, color = ~ STD_Y, type = "bar", colors = pal3[c(7, 1)],
+        showlegend = F) %>%
+        layout(barmode = "group",
+               yaxis = list(title = "일일 카드 이용 금액"))
+subplot(ca, f, margin = 0.06)
+
+
+```
+
+# SNS 데이터 시각화
+
+## 평균 긍정 게시물 비율과 총 언급 게시물 수 시각화
+
+```{r}
+for_bar = p_n %>% 
+        group_by(STD_Y, gubun, pn) %>%
+        summarize(value = sum(value)) %>%
+        group_by(STD_Y, gubun) %>%
+        mutate(tot_value = sum(value),
+               mean_rate = value/sum(value)) %>%
+        data.frame() %>%
+        filter(pn == "POSITIVE") %>%
+        group_by(gubun) %>%
+        mutate(diff_rate = diff(log(mean_rate)),
+               diff_value = diff(log(tot_value)))
+
+
+bar1 = plot_ly(data = for_bar,
+               x = ~ reorder(gubun, -diff_rate), y = ~ mean_rate, type = "bar", color = ~ STD_Y, 
+        colors = pal1[c(1, 7)], showlegend = F) %>%
+        layout(xaxis = list(showline = T, showgrid = F, title = ""),
+               yaxis = list(title = "평균 긍정 게시물 비율"))
+
+bar2 = plot_ly(data = for_bar,
+        x = ~ reorder(gubun, -diff_rate), y = ~ tot_value, type = "bar", color = ~ STD_Y, 
+        colors = pal1[c(1, 7)], showlegend = T) %>%
+        layout(xaxis = list(showline = T, showgrid = F, title = ""),
+               yaxis = list(title = "총 언급 게시물 수"))
+
+subplot(bar1, bar2, titleY = T, margin = 0.05, nrows= 2)
+
+
+```
+
+# 네이버데이터랩과 코로나신규확진자 시각화
+
+```{r}
+
+# 네이버데이터랩 전처리
+
+datalab_tf<-merge(datalab_t, datalab_f, by="날짜")
+datalab_tf$날짜<-ymd(datalab_tf$날짜)
+datalab_tf$날짜<-as.Date(datalab_tf$날짜)
+
+datalab_tf_19<-datalab_tf %>% filter(날짜>=as.Date("2019-02-01") & 날짜<=as.Date("2019-06-30"))
+datalab_tf_20<-datalab_tf %>% filter(날짜>=as.Date("2020-02-01") & 날짜<=as.Date("2020-06-30"))
+datalab_tf_total<-rbind(datalab_tf_19, datalab_tf_20)
+
+corona_diff<-corona_ex_final[ order(corona_ex_final$stateDt), ]$diff
+datalab<-cbind(datalab_tf_total, 코로나확진자수=c(rep(0,nrow(datalab_tf_19)),corona_diff))
+datalab$국내여행<-as.numeric(datalab$국내여행)
+datalab$유동인구<-as.numeric(datalab$유동인구)
+
+# trend 추출
+
+k_1 = knn_reg(x =datalab$날짜, y = datalab$유동인구, k = 7) #유동인구 검색량 trend 추출
+trend_flow = knn_reg(x = datalab$날짜, y = k_1, k = 7)
+    
+k_2 = knn_reg(x = datalab$날짜, y = datalab$국내여행, k = 7) # 국내여행 검색량 trend 추출
+trend_trl = knn_reg(x = datalab$날짜, y = k_2, k = 7)
+
+datalab_trend<-cbind(datalab, "trend_flow"=trend_flow, "trend_trl"=trend_trl)
+datalab_trend<-cbind(datalab_trend,"STD_Y"=year(datalab_trend$날짜))
+datalab_trend$STD_Y<-as.factor(datalab_trend$STD_Y)
+```
+
+
+## 국내여행키워드 trend와 코로나신규확진자수
+
+```{r}
+gg_travel<-ggplot(datalab_trend %>% filter(STD_Y=="2019"))
+datebreaks <- seq(as.Date("2019-02-01"), as.Date("2019-06-30"), by="1 month")
+theme_basic2<-theme(   legend.position = "top",
+        legend.direction = "horizontal",
+        legend.box = "horizontal",
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title.x = element_blank(),
+          panel.grid.major.y = element_line(color = "lightgrey"),
+          panel.grid.minor.x = element_blank(),
+         panel.grid.major.x = element_line(color = "grey", linetype = "dotted"),
+          panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(angle = -30, hjust = -0.2)
+
+)
+
+
+
+gg1<-gg_travel + geom_line( aes(x=날짜, y=trend_trl),col=pal1[7] ,lwd=0.8)+scale_x_date(name = "Date", breaks = datebreaks, labels = date_format("%Y %b"))+ylim(0,120)+
+   labs(y="국내여행키워드") + ggtitle("2019") + theme_minimal()+ theme_basic2 
+
+```
+
+```{r}
+gg_travel<-ggplot(datalab_trend %>% filter(STD_Y=="2020"))
+datebreaks <- seq(as.Date("2020-02-01"), as.Date("2020-06-30"), by="1 month")
+theme_basic3<-   theme(   legend.position = c(.9,.9),
+        axis.title.y.left=element_blank(),
+        axis.text.y.left=element_blank(),
+        axis.title.x=element_blank(),
+          axis.ticks.y = element_blank(), 
+          axis.line.y = element_blank(),
+          panel.grid.major.y =  element_line(color = "lightgrey"),
+          panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_line(color = "grey", linetype = "dotted"),
+          panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(angle = -30, hjust = -0.2)
+        
+)
+
+gg2<-gg_travel + geom_line(aes(x=날짜, y=코로나확진자수/7,color="코로나신규확진자"), lwd=0.8)+geom_line( aes(x=날짜, y=trend_trl,color="국내여행키워드") ,lwd=0.8)+scale_y_continuous(
+  "국내여행키워드", limits=c(0,120),
+  sec.axis = sec_axis(~ . *7, name = "코로나신규확진자")
+)+scale_x_date(name = "Date", breaks = datebreaks, labels = date_format("%Y %b"))+ggtitle("2020")+
+  scale_color_manual(name = "구분", 
+                     values = c("코로나신규확진자" = pal1[1], "국내여행키워드" = pal1[7]))+
+
+  theme_minimal() + theme_basic3 +
+  annotate("rect", xmin = as.Date(ymd("20200218")), xmax = as.Date(ymd("20200228")), ymin = 0, ymax = 120, fill = "lightgrey", alpha=.2) +
+  annotate("rect", xmin = as.Date(ymd("20200419")), xmax = as.Date(ymd("20200429")), ymin  = 0, ymax = 120, fill = "lightgrey", alpha=.2)+
+  annotate("rect", xmin = as.Date(ymd("20200506")), xmax = as.Date(ymd("20200516")), ymin = 0, ymax = 120, fill = "lightgrey", alpha=.2)
+
+```
+
+```{r}
+grid.arrange(gg1, gg2, ncol=2)
+```
+
+
+## 유동인구키워드 trend와 코로나신규확진자수
+
+
+```{r}
+gg_travel<-ggplot(datalab_trend %>% filter(STD_Y=="2019"))
+datebreaks <- seq(as.Date("2019-02-01"), as.Date("2019-06-30"), by="1 month")
+
+gg1<-gg_travel + geom_line( aes(x=날짜, y=trend_flow),col=pal1[7] ,lwd=0.8)+scale_x_date(name = "Date", breaks = datebreaks, labels = date_format("%Y %b"))+ylim(0,120)+
+   labs(y="유동인구키워드") + ggtitle("2019") + theme_minimal()+ theme_basic2 
+
+```
+
+```{r}
+gg_travel<-ggplot(datalab_trend %>% filter(STD_Y=="2020"))
+datebreaks <- seq(as.Date("2020-02-01"), as.Date("2020-06-30"), by="1 month")
+
+
+gg2<-gg_travel + geom_line(aes(x=날짜, y=코로나확진자수/7,color="코로나신규확진자"), lwd=0.8)+geom_line( aes(x=날짜, y=trend_flow,color="유동인구키워드") ,lwd=0.8)+scale_y_continuous(
+  "국내여행키워드", limits=c(0,120),
+  sec.axis = sec_axis(~ . *7, name = "코로나신규확진자")
+)+scale_x_date(name = "Date", breaks = datebreaks, labels = date_format("%Y %b"))+ggtitle("2020")+
+  scale_color_manual(name = "구분", 
+                     values = c("코로나신규확진자" = pal1[1], "유동인구키워드" = pal1[7]))+
+  theme_minimal() + theme_basic3 +
+  annotate("rect", xmin = as.Date(ymd("20200218")), xmax = as.Date(ymd("20200228")), ymin = 0, ymax = 120, fill = "lightgrey", alpha=.2) +
+  annotate("rect", xmin = as.Date(ymd("20200419")), xmax = as.Date(ymd("20200429")), ymin  = 0, ymax = 120, fill = "lightgrey", alpha=.2)+
+  annotate("rect", xmin = as.Date(ymd("20200506")), xmax = as.Date(ymd("20200516")), ymin = 0, ymax = 120, fill = "lightgrey", alpha=.2)
+
+```
+
+```{r}
+grid.arrange(gg1, gg2, ncol=2)
+```
+
+# 2019 국민여행조사
+
+## 여행을 다녀오지 않은 이유 
+
+```{r}
+#데이터 전처리
+
+no_travel<-as.data.frame(t(as.matrix(no_travel)))
+rownames(no_travel) <- NULL
+colnames(no_travel)<-c("년도", "이유", "응답률")
+no_travel$년도 <- as.factor(no_travel$년도)
+no_travel<-as.data.frame(no_travel)
+
+#데이터 시각화
+
+ggplot(data=no_travel) +
+  geom_bar(aes(x = reorder(이유, 응답률), y = 응답률, fill = 년도),stat="identity",width = 0.85) +
+  coord_flip() +
+  facet_grid(rows = vars(년도), scales = "free_y") +
+  labs(
+    title = "여행을 다녀오지 않은 이유 설문조사",
+    subtitle = "단위 : %"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17, face = "bold"),
+    strip.text.y = element_text(angle = 270, face = "bold"),
+    strip.placement = "outside",
+    axis.title.y = element_blank(),
+    axis.text = element_text(size = 10),
+    legend.position = "none",
+    panel.grid.major.y = element_blank(),
+    ) +
+  scale_fill_manual(values = c(pal1[7], pal1[1]))
+
+
+
+```
+
+## 국내여행/숙박여행/당일여행 총 횟수, 총 지출
+
+```{r}
+#데이터 전처리
+
+num_travel<-as.data.frame(t(as.matrix(num_travel)))
+exp_travel<-as.data.frame(t(as.matrix(exp_travel)))
+rownames(no_travel) <- NULL
+
+colnames(num_travel)<-c("년도", "유형", "횟수")
+colnames(exp_travel)<-c("년도", "유형", "지출액")
+
+num_travel$년도 <- as.factor(num_travel$년도)
+num_travel<-as.data.frame(num_travel)
+
+exp_travel$년도 <- as.factor(exp_travel$년도)
+exp_travel<-as.data.frame(exp_travel)
+
+num_exp_travel<-merge(num_travel, exp_travel, by=c("년도", "유형"))
+num_exp_travel$횟수<-as.numeric(num_exp_travel$횟수)
+num_exp_travel$지출액<-as.numeric(num_exp_travel$지출액)
+
+# 국내여행 횟수와 지출액 시각화
+
+p1 = plot_ly(num_exp_travel %>%
+                filter(유형 == "국내전체"),
+        x = ~ 년도, y = ~ 횟수, color = ~ 년도, type = "bar",
+        colors = pal2[c(1, 7)], showlegend = F) %>%
+        layout(yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+p2 = plot_ly(num_exp_travel %>%
+                filter(유형 == "국내전체"),
+        x = ~ 년도, y = ~ 지출액, color = ~ 년도, type = "bar",
+        colors = pal2[c(1, 7)]) %>%
+        layout(yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+subplot(p1, p2, titleY = T, margin = 0.05)
+
+
+# 숙박/당일여행 횟수와 지출액 시각화
+
+p1 = plot_ly(num_exp_travel %>% filter(유형 != "국내전체"),
+             x = ~ 유형, y = ~ 횟수, color = ~ 년도, type = "bar",
+             colors = pal2[c(1, 7)]) %>%
+        layout(barposition = "group",
+               yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+p2 = plot_ly(num_exp_travel %>% filter(유형 != "국내전체"),
+             x = ~ 유형, y = ~ 지출액, color = ~ 년도, type = "bar",
+             colors = pal2[c(1, 7)], showlegend = F) %>%
+        layout(barposition = "group",
+               yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+subplot(p1, p2, titleY = T, margin = 0.05)
+
+```
+
+
+# 기타(논문 그래프 재구성)
+
+논문에 있는 수치를 기준으로 그래프를 재구현하였습니다.  
+
+## 코로나19로 인해 하지 못한 여가활동(복수응답)
+
+```{r}
+yeoga = data.frame(yeoga = c("국내관광", "친구/동호회 모임", "영화관람", "해외관광", "맛집탐방",
+                             "종교활동", "공연관람", "스포츠 관람 활동", "문화예술교육 참여",
+                             "스포츠 참여 활동", "아웃도어 레크레이션", "박물관/미술관 관람",
+                             "사회봉사 활동", "기타"),
+                   percent = c(49.6, 45.6, 44.6, 37.6, 25.9, 15.3, 13.6, 13.4, 
+                               11.8, 11.1, 10.6, 8.5, 5.9, 1.1))
+plot_ly(yeoga,
+        x = ~ reorder(yeoga, - percent), y = ~percent/100, type = "bar", showlegend = F,
+        marker = list(color = c(pal1[7], rep(pal1[1], 13)))) %>%
+        layout(yaxis = list(title = "", tickformat = "%"),
+               xaxis = list(showline = T, showgrid = F,
+                            title = ""))
+```
+
+## 코로나19 발생 이후 국내 여행 계기
+
+```{r}
+cause = data.frame(cause = c("여행상품 할인을 많이 해서", "자녀의 개학이 연기돼서",
+                             "해외여행 계획이 취소되어서", "기타", "갑자기 휴가가 생겨서",
+                             "사회적 거리두기로 인한 스트레스"),
+                   percent = c(4.8, 11.2, 11.9, 15.5, 38.1, 50.8))
+
+plot_ly(cause,
+        x = ~ percent/100, y = ~ cause, type = "bar", showlegend = F,
+        marker = list(color = c( rep(pal1[1], 5), pal1[7])),
+        orientation = "h") %>%
+        layout(xaxis = list(title = "", tickformat = "%", zeroline = F, range = c(-0.01, 0.55)),
+               yaxis = list(showline = F, showgrid = F,
+                            title = "",
+                            categoryorder = "array",
+                        categoryarray = rev(cause$cause)))
+```
+
+## 코로나19 발생 이후 관광활동 제약요인
+
+```{r}
+jaeyak = data.frame(jaeyak = c("대인접촉에 따른 감염 우려", "숙박시설 위생 우려",
+                               "주변 시선에 대한 부담", "관광지에 대한 막연한 두려움",
+                               "대중교통 이용에 대한 불안", "기타"),
+                    percent = c(66.5, 11.4, 8.3, 7.9, 5.3, 0.6))
+plot_ly(jaeyak,
+        x = ~ percent/100, y = ~ jaeyak, type = "bar", showlegend = F,
+        marker = list(color = c(pal1[7], rep(pal1[1], 5))),
+        orientation = "h") %>%
+        layout(xaxis = list(title = "", tickformat = "%", zeroline = F, range = c(-0.01, 0.7)),
+               yaxis = list(showline = F, showgrid = F,
+                            title = "",
+                            categoryorder = "array",
+                            categoryarray = jaeyak$jaeyak))
+```
+
+## 소셜미디어를 통해 본 가벼운 나들이 키워드
+
+```{r}
+infl = data.frame(year = rep(c("2018", "2019"), 3),
+                  gubun = rep(c("데이트", "소풍", "일상"), each = 2),
+                  instagram = c(2417, 13407, 73, 465, 623, 1006),
+                  facebook = c(475, 712, 70, 148, 40, 103))
+
+
+p1 = plot_ly(infl,
+             x = ~ gubun, y = ~ instagram, color = ~ year, type = "bar",
+             colors = pal2[c(1, 7)]) %>%
+        layout(barposition = "group",
+               yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+p2 = plot_ly(infl,
+             x = ~ gubun, y = ~ facebook, color = ~ year, type = "bar",
+             colors = pal2[c(1, 7)], showlegend = F) %>%
+        layout(barposition = "group",
+               yaxis = list(zeroline = F),
+               xaxis = list(tickfont = list(size = 13)))
+
+subplot(p1, p2, margin = 0.05)
+```
+
